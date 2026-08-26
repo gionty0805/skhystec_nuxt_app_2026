@@ -1892,8 +1892,6 @@
 // 이 페이지 전용 타이틀과 디자인 세팅만 독립 선언
 useHead({
   title: 'Rack 관리 | SKHDC 관리 시스템',
-  bodyAttrs: { class: 'main' },
-  link: [{ rel: 'stylesheet', type: 'text/css', href: '/css/pages/rack.css' }],
   //script: [
   //  { src: '/js/pages/rack.js', defer: true }
   //]

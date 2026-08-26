@@ -1,11 +1,3 @@
-<!-- app/app.vue -->
-<template>
-  <div>
-    <!-- 이 컴포넌트가 app/pages 폴더 내의 index.vue나 login.vue를 감지해서 화면에 그려줍니다. -->
-    <!-- ⚠️ 이 파일에는 <template>을 더 이상 추가하지 마세요. -->
-    <NuxtPage />
-  </div>
-</template>
 
 <script setup>
 // 🟢 글로벌 메타 정보, 공통 CSS, 공통 스크립트만 깔끔하게 통합 관리합니다.
@@ -57,6 +49,7 @@ html, body, #__nuxt, #__nuxt > div {
   flex: 1;
   margin: 0;
   padding: 0;
+  scrollbar-gutter: stable; /* 스크롤바 자리를 미리 항상 예약해두는 속성 */
 }
 
 /* 조상 박스들이 찌그러지지 않고 좌우로도 가득 차도록 강제 고정 */
@@ -69,4 +62,21 @@ html, body, #__nuxt, #__nuxt > div {
 .content {
   flex: 1;
 }
+/* 공통 CSS 파일 또는 app.vue */
+
+/* 2. 만약 기존 프로젝트가 body의 .popOn 클래스로 스크롤을 제어 중이라면 아래 표준 대응을 추가 */
+body.popOn {
+  overflow: hidden !important;
+  /* 브라우저 스크롤바의 평균 두께(약 16px ~ 17px)만큼 우측 여백을 강제 부여하여 밀림 방지 */
+  padding-right: calc(100vw - 100%); 
+}
 </style>
+
+<!-- app/app.vue -->
+<template>
+  <div>
+    <!-- 이 컴포넌트가 app/pages 폴더 내의 index.vue나 login.vue를 감지해서 화면에 그려줍니다. -->
+    <!-- ⚠️ 이 파일에는 <template>을 더 이상 추가하지 마세요. -->
+    <NuxtPage />
+  </div>
+</template>
