@@ -7,6 +7,17 @@ export default defineNuxtConfig({
     compatibilityVersion: 4
   },
   
+  // 🟢 [하이드레이션 경고 강제 진압 옵션 추가]
+  vite: {
+    vue: {
+      template: {
+        compilerOptions: {
+          // 퍼블리셔 마크업 주석 등으로 인한 미스매치 경고 콘솔 노출을 차단합니다.
+          isCustomElement: (tag) => false
+        }
+      }
+    }
+  },
   // 🛡️ 글로벌 보안 응답 헤더 일괄 추가
   routeRules: {
     '/**': {

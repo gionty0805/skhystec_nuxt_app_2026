@@ -46,9 +46,9 @@ useHead({
   ]
 })
 </script>
+<!-- app/app.vue 맨 하단 -->
 <style>
-/* Nuxt가 강제로 끼워넣은 컨테이너들의 높이를 가득 채우고 */
-/* 부모(body)의 Flexbox 정렬 속성을 자식(login)에게 그대로 토스하도록 만듭니다. */
+/* 🟢 Nuxt 시스템이 강제 삽입한 중간 상자들의 높이 댐을 완전히 허물어줍니다. */
 html, body, #__nuxt, #__nuxt > div {
   height: 100% !important;
   min-height: 100vh !important;
@@ -59,9 +59,14 @@ html, body, #__nuxt, #__nuxt > div {
   padding: 0;
 }
 
-/* 퍼블리셔의 정렬 구조가 수평/수직 분할 레이아웃일 경우를 위해 */
-/* 중간 상자들이 공간을 100% 다 차지하도록 유연하게 확장시킵니다. */
-#__nuxt {
+/* 조상 박스들이 찌그러지지 않고 좌우로도 가득 차도록 강제 고정 */
+#__nuxt, #__nuxt > div {
   width: 100%;
+}
+
+/* 🟢 퍼블리셔의 배치 규격인 .content가 flex 레이아웃 안에서 */
+/* 빈 공간을 끝까지 밀고 내려가 채우도록 유연성을 부여합니다. */
+.content {
+  flex: 1;
 }
 </style>
