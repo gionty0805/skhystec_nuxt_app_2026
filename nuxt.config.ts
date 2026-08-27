@@ -36,5 +36,13 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     externalBackendUrl: process.env.EXTERNAL_BACKEND_URL || 'https://your-backend.com'
+  },
+  // 💡 Nitro 빌드 엔진이 프리즈마 클라이언트를 제멋대로 변조하지 못하도록 락을 겁니다.
+  nitro: {
+    experimental: {
+      openAPI: false
+    },
+    // 빌드 시 외부 Node.js 기본 라이브러리로 온전히 취급하도록 지정
+    external: ['@prisma/client']
   }
 })
