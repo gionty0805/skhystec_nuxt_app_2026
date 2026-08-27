@@ -77,13 +77,34 @@
               </ul>
             </nav>
 
+            <!-- layouts/default.vue 템플릿 구역 중 header-left-wrap 부분 -->
             <div class="header-left-wrap">
               <ul class="header-left-list-wrap onW dis-fx">
-                <li class="header-left-list"><div class="detail"><span class="tag bg-orange">관리자</span> 홍길동 TL</div></li>
-                <li class="header-left-list"><button type="button" id="btnLogout" onclick="popOpen('#logout-pop', '#btnLogout')">로그아웃</button></li>
+                
+                <!-- 💡 [동적 연동] 로그인 상태(ADMIN/USER)에 따라 태그 색상, 권한명, 사번 ID가 자동 표기됩니다. -->
+                <li class="header-left-list">
+                  <div class="detail" v-if="data && data.isLoggedIn">
+                    <span :class="['tag', data.userRole === 'ADMIN' ? 'bg-orange' : 'bg-blue']">
+                      {{ data.userRole === 'ADMIN' ? '관리자' : '일반사용자' }}
+                    </span>
+                    <!-- 세션에 담긴 유저 식별자(사번) 동적 출력 -->
+                    {{ data.userId || '사원' }}
+                  </div>
+                  <div class="detail" v-else>
+                    <span class="tag bg-gray">Guest</span> 미인증 사용자
+                  </div>
+                </li>
+                
+                <li class="header-left-list">
+                  <!-- 기존 퍼블리셔의 제이쿼리 팝업 트리거 유지 -->
+                  <button type="button" id="btnLogout" onclick="popOpen('#logout-pop', '#btnLogout')">로그아웃</button>
+                </li>
               </ul>
+              
               <button type="button" class="sitemap-btn" id="sitemap-btn" title="사이트맵 열기" onclick="hambergerfunc(this)">
-                <span class="sitemap-btn-bar line-1"></span><span class="sitemap-btn-bar line-2"></span><span class="sitemap-btn-bar line-3"></span>
+                <span class="sitemap-btn-bar line-1"></span>
+                <span class="sitemap-btn-bar line-2"></span>
+                <span class="sitemap-btn-bar line-3"></span>
               </button>
             </div>
           </div>
@@ -174,17 +195,37 @@
     </ClientOnly>
   </div>
 </template>
+<!-- layouts/default.vue 스크립트 구역 -->
+<script setup lang="ts">
+import { useFetch, useRequestHeaders, navigateTo } from '#app'
 
-<script setup>
-// 공통 데이터 감시 및 로그아웃 엔진 집약
-const { data, error, refresh } = await useFetch('/api/innerapi/dashboard')
+// 1. 공통 데이터 감시 및 권한 정보 집약 (체크 세션 API와 연동)
+const { data, refresh } = await useFetch('/api/innerapi/check-session', {
+  headers: useRequestHeaders(['cookie']) // SSR 대응용 쿠키 헤더 전달
+})
 
+// 2. 로그아웃 비즈니스 로직 (보안 세션 파기 - innerapi 경로로 정정 완료)
 const handleLogout = async () => {
   try {
+    // 💡 내부 인증 관문 서버의 로그아웃 로직 가동 (httpOnly 쿠키 파쇄)
     await $fetch('/api/outerapi/logout', { method: 'POST' })
-    if (typeof window !== 'undefined' && window.popClose) { window.popClose('#logout-pop') }
+    
+    // 기존 퍼블리셔의 제이쿼리 팝업 닫기 함수 안전 호출
+    if (typeof window !== 'undefined' && (window as any).popClose) { 
+      (window as any).popClose('#logout-pop') 
+    }
+    
     await refresh()
-    navigateTo('/login')
-  } catch (err) { alert('로그아웃 실패: ' + err.message) }
+    
+    // 페이지를 새로고침하며 깨끗한 게스트 상태로 로그인창 퇴출
+    window.location.href = '/login'
+  } catch (err: any) { 
+    alert('로그아웃 실패: ' + err.message) 
+  }
+}
+
+// 징검다리 전역 함수 개설 (HTML 내부 onclick에서 Vue 함수를 호출할 수 있게 바인딩)
+if (process.client) {
+  (window as any).executeRealLogout = handleLogout
 }
 </script>
