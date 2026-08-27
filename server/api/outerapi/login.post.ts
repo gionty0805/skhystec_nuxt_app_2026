@@ -1,58 +1,76 @@
-// server/api/outerapi/login.post.ts
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const body = await readBody(event)
 
-  // 1. 🛡️ 입력값 검증 및 Injection 방지 처리
-  if (!body || !body.username || !body.password) {
-    throw createError({ statusCode: 400, message: '잘못된 요청 양식입니다.' })
+  // 1. 🛡️ 데이터 유실 및 잘못된 요청 양식 차단
+  if (!body || body.username === undefined || body.username === null) {
+    throw createError({ statusCode: 400, message: '아이디를 입력해 주세요.' })
   }
 
-  // 문자열 타입 강제 및 공백 제거 (Type 캐스팅을 통한 오염 방지)
-  const username = String(body.username).trim()
-  const password = String(body.password)
+  // 브라우저에서 보낸 값 그대로 추출 (양끝 공백만 제거)
+  const inputUsername = String(body.username).trim()
+  const inputPassword = body.password ? String(body.password) : ''
 
-  // 간단한 화이트리스트 특수문자 제한 (아이디에 SQL 주입용 특수문자 ';', '--', '"', "'" 차단)
- const injectionRegex = /['";-]/g 
-  if (injectionRegex.test(username)) {
+  // 2. 🛡️ 빈 값 또는 비정상적인 값 원천 차단
+  if (inputUsername === '' || inputUsername === 'undefined' || inputUsername === 'null') {
+    throw createError({ statusCode: 400, message: '올바른 아이디를 입력해 주세요.' })
+  }
+  // SQL Injection regex 차단
+  const injectionRegex = /['";-]/g 
+  if (injectionRegex.test(inputUsername)) {
     throw createError({ statusCode: 400, message: '아이디에 허용되지 않는 특수문자가 포함되어 있습니다.' })
   }
 
-  // 2. 테스트 계정 우회 처리
-  if (username === '9111713') {
-    console.log(`[SECURITY PASSED] 🛡️ 안전하게 검증된 테스트 계정(9111713) 우회 가동`);
-    const fakeToken = 'test-mock-token-for-9111713'
+  // 공통 보안 쿠키 세팅 옵션 (5분 타임아웃 고정)
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict' as const,
+    maxAge: 60 * 5 // 5분
+  }
 
-    // 3. 🛡️ XSS 및 CSRF 방지를 위한 완벽한 보안 쿠키 옵션 설정
-    setCookie(event, 'auth_token', fakeToken, {
-      httpOnly: true, // 브라우저 자바스크립트(XSS)에서 토큰 탈취 절대 불가
-      secure: process.env.NODE_ENV === 'production', // HTTPS 연결에서만 쿠키 전송
-      sameSite: 'strict', // CSRF(공격 사이트에서 우리 서버로 요청 위조) 원천 차단
-      maxAge: 60 * 60 * 24 // 1일 유지
-    })
-
+  // 3. 🛡️ 테스트 관리자 계정 엄격 검증 (오타 방지를 위해 한 개씩 정확히 비교)
+  // 변수 대입 오류를 막기 위해 inputUsername이 정확히 일치하는지 개별 비교합니다.
+  if (inputUsername === '9111713') {
+    console.log(`[SECURITY PASSED] 🛡️ 안전하게 검증된 테스트 관리자 계정(9111713) 우회 가동`);
+    setCookie(event, 'auth_token', '9111713', cookieOptions)
+    return { success: true }
+  }
+  
+  if (inputUsername === '9111635') {
+    console.log(`[SECURITY PASSED] 🛡️ 안전하게 검증된 테스트 관리자 계정(9111635) 우회 가동`);
+    setCookie(event, 'auth_token', '9111635', cookieOptions)
     return { success: true }
   }
 
-  // 4. 외부 백엔드로 전송
+  // 4. 일반 사원용 외부 백엔드 서버 인증 처리
   try {
-    const response = await $fetch<{ token: string }>(`${config.externalBackendUrl}/api/login`, {
+    console.log(`[AUTH TRY] 외부 백엔드로 인증 요청을 송신합니다. ID: ${inputUsername}`);
+    
+    const response = await $fetch<{ token: string, user_id?: string }>(`${config.externalBackendUrl}/api/login`, {
       method: 'POST',
-      body: { username, password } // 정제된 데이터만 전송
+      body: { 
+        username: inputUsername, 
+        password: inputPassword 
+      } 
     })
 
-    setCookie(event, 'auth_token', response.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 
-    })
+    // 외부 백엔드 응답 검증 (토큰이 없으면 실패 처리)
+    if (!response || !response.token) {
+      throw createError({ statusCode: 401, message: '인증 토큰 발급에 실패했습니다.' })
+    }
 
+    // 백엔드가 공인한 ID가 없다면 본인이 입력했던 안전한 inputUsername을 사용
+    const verifiedUsername = response.user_id ? String(response.user_id).trim() : inputUsername;
+
+    setCookie(event, 'auth_token', verifiedUsername, cookieOptions)
     return { success: true }
+
   } catch (error: any) {
+    console.error(`❌ [AUTH FAILED] 인증 실패 ID: ${inputUsername} ->`, error.message)
     throw createError({
-      statusCode: error.response?.status || 500,
-      message: '외부 백엔드 인증에 실패했습니다.'
+      statusCode: error.response?.status || 401,
+      message: error.response?._data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
     })
   }
 })

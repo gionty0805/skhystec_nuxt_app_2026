@@ -150,7 +150,7 @@
   <!-- e: 비밀번호 초기화 팝업 레이어 -->
 </template>
 
-<script setup>
+<script setup lang="ts"> // 💡 lang="ts"를 추가하여 타입스크립트 문법을 안전하게 허용합니다.
 useHead({
   link: [
     { rel: 'stylesheet', type: 'text/css', href: '/css/pages/login.css' }
@@ -159,20 +159,55 @@ useHead({
 // ------------------------------------------------------------------
 // 🛡️ 완비된 기존 로그인 연동 아키텍처 비즈니스 로직 (변경 제로)
 // ------------------------------------------------------------------
-const form = ref({ username: '', password: '' })
+import { reactive, ref } from 'vue'
+import { useRoute, navigateTo } from '#app'
+
+// 💡 템플릿의 'form.username'과 완전 일치하도록 ref 대신 reactive를 사용합니다.
+const form = reactive({
+  username: '',
+  password: ''
+})
+
 const errorMessage = ref('')
+const route = useRoute()
 
 const handleLogin = async () => {
+  // 에러 메시지 초기화
   errorMessage.value = ''
+
+  // 1. 🛡️ 프론트엔드 공백 입력 차단 유효성 검증
+  if (!form.username.trim()) {
+    errorMessage.value = '아이디를 입력해 주세요.'
+    return
+  }
+  if (!form.password) {
+    errorMessage.value = '비밀번호를 입력해 주세요.'
+    return
+  }
+
   try {
-    await $fetch('/api/outerapi/login', {
+    // 2. 내부 인증 관문 서버(innerapi)로 실제 입력 데이터 전송
+    const response = await $fetch<{ success: boolean }>('/api/outerapi/login', {
       method: 'POST',
-      body: form.value
+      body: {
+        username: form.username,
+        password: form.password
+      }
     })
-    navigateTo('/')
-  } catch (err) {
-    //errorMessage.value = err.message || '로그인 처리에 실패했습니다.'
-    errorMessage.value = '아이디와 비밀번호를 다시 확인해주세요.'
+
+    // 3. 로그인 최종 성공 시 리다이렉트 동선 가동
+    if (response && response.success) {
+      // 💡 [빌드 에러 해결] 깨짐의 원인이었던 'as string' 대신 String() 함수로 안전하게 교정했습니다.
+      const queryRedirect = route.query.redirect
+      const redirectPath = queryRedirect ? String(queryRedirect) : '/'
+      
+      return navigateTo(decodeURIComponent(redirectPath))
+    }
+    
+  } catch (error: any) {
+    // 4. 🚨 서버가 던진 400, 401 보안 에러 메시지를 낚아채서 화면에 동적 실시간 출력
+    const errorMsg = error.response?._data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
+    errorMessage.value = errorMsg
   }
 }
 </script>

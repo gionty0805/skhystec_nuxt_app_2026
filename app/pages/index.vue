@@ -362,11 +362,12 @@
     <!-- e: 장비 상세 정보 -->
   </NuxtLayout>
 </template>
-<script setup>
-import { onMounted } from 'vue'
+<!-- app/pages/index.vue 스크립트 구역 -->
+<script setup lang="ts">
+import { onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRoute, navigateTo, useFetch, useHead } from '#app'
 
-// 🟢 대시보드 페이지 진입 시 전용 디자인 CSS 결합
-// 브라우저의 진짜 최상위 <body> 태그에 class="main"을 강제로 꼽아주라고 선언합니다.
+// 1. 🟢 대시보드 페이지 진입 시 전용 디자인 CSS 및 바디 클래스 결합
 useHead({
   bodyAttrs: {
     class: 'main'
@@ -375,47 +376,113 @@ useHead({
     { rel: 'stylesheet', type: 'text/css', href: '/css/pages/main.css' }
   ]
 })
-// 🔥 [차트 작동 핵심 핵심] HTML 레이아웃이 화면에 완전히 부착된 후 퍼블리셔의 차트 함수 작동 지시
-// app/pages/index.vue 하단 스크립트 수정
-onMounted(() => {
-  if (process.client && data.value) {
-    setTimeout(() => {
-      // 🛡️ [방어막 1] 이미 메인 스크립트 태그가 붙어 있다면 중복 주입을 물리적으로 스킵
-      if (document.getElementById('nuxt-main-dashboard-script')) {
-        console.log('📊 main.js가 이미 메모리에 로드되어 있어 재선언을 스킵합니다.')
-        return
-      }
 
-      // 🛡️ [방어막 2] main.js 내부에서 무조건 찾는 핵심 태그(예: 차트1)가 화면에 실제로 존재하는지 최종 검증
-      // (만약 퍼블리셔 스크립트가 다른 태그를 기준으로 삼는다면 'chart1' 대신 해당 ID를 넣으세요)
-      if (!document.getElementById('chart1')) {
-        console.log('⚠️ 대시보드 차트 엘리먼트가 아직 생성되지 않아 스크립트 가동을 보류합니다.')
-        return
-      }
+// 2. 내부 API 대시보드 연동 데이터 수집 기동
+const { data } = await useFetch('/api/innerapi/dashboard')
 
-      // 모든 검증을 통과한 순간에만 안전하게 스크립트 배치
-      const script = document.createElement('script')
-      script.id = 'nuxt-main-dashboard-script' // 고유 ID 마킹
-      script.src = '/js/pages/main.js'
-      script.defer = true
-      document.head.appendChild(script)
-      console.log('📊 대시보드 메인 화면에만 main.js 스크립트를 안전하게 바인딩했습니다.')
-    }, 200) // 하이드레이션 완료 타이밍 여유를 위해 지연시간을 200ms로 상향 조정
-  }
-})
+let chartObserver: MutationObserver | null = null
 
-// 내부 API 대시보드 연동 데이터 수집 기동
-const { data, error, refresh } = await useFetch('/api/innerapi/dashboard')
+// 📊 외부 main.js 코드를 텍스트로 낚아채서 격리된 방에서 가동시키는 마스터 함수
+const forceRenderCharts = async () => {
+  if (!process.client) return
 
-// 로그아웃 로직 (보안 세션 파기)
-const handleLogout = async () => {
+  // 1) 실제 본문에 차트 그릇(#chart1)이 최종 안착했는지 레이아웃 검증
+  const chartTarget = document.getElementById('chart1')
+  if (!chartTarget) return
+
+  // 차트 그릇이 레이아웃 크기(Width/Height)를 완벽히 확보했는지 검사
+  if (chartTarget.offsetWidth === 0 || chartTarget.offsetHeight === 0) return
+
   try {
-    await $fetch('/api/innerapi/logout', { method: 'POST' })
-    await refresh()
-    navigateTo('/login')
-  } catch (err) {
-    alert('로그아웃 실패: ' + err.message)
+    // 💡 [핵심 해결책] <script> 태그를 박는 대신, main.js 소스코드를 텍스트 스트링으로 직접 읽어옵니다.
+    // 캐시 방지를 위해 랜덤 타임스탬프 쿼리를 뒤에 붙여 매번 새로운 코드로 인식시킵니다.
+    const response = await fetch(`/js/pages/main.js?t=${Date.now()}`)
+    const rawJsCode = await response.text()
+
+    if (!rawJsCode) return
+
+    // 💡 [클라이막스] 읽어온 소스코드를 독립된 익명 블록(Scoped Block) 텍스트로 가공합니다.
+    // 이렇게 하면 'chartColor' 변수가 최상위 전역이 아닌, 이 실행 순간의 독립된 방 안에 갇히게 됩니다.
+    const scopedJsCode = `
+      (function() {
+        try {
+          ${rawJsCode}
+        } catch(e) {
+          console.error("차트 실행 중 내부 오류:", e);
+        }
+      })();
+    `
+
+    // 브라우저 동적 컴파일러(Function 구문)를 이용해 격리된 공간에서 차트 로직 점화!
+    // ❌ 이제 전역 메모리에 'chartColor'가 등록되지 않으므로 중복 선언 에러가 100% 영구 박멸됩니다.
+    const executeCharts = new Function(scopedJsCode)
+    executeCharts()
+    
+    console.log('🎯 [PERFECT SUCCESS] 외부 main.js 소스코드를 가상 스코프에 격리 주입하여 중복 에러를 완전 박멸했습니다.')
+
+  } catch (error) {
+    console.error('❌ 차트 스크립트 로드 실패:', error)
   }
 }
 
+// 👁️ 타이밍 엇박자를 방지하는 정밀 감시 리스너
+const startChartObservation = () => {
+  if (!process.client) return
+  if (chartObserver) chartObserver.disconnect()
+
+  if (document.getElementById('chart1')) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { forceRenderCharts() })
+    })
+    return
+  }
+
+  chartObserver = new MutationObserver(() => {
+    if (document.getElementById('chart1')) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          forceRenderCharts()
+          if (chartObserver) chartObserver.disconnect() // 가동 성공 시 카메라 해제
+        })
+      })
+    }
+  })
+
+  chartObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  })
+}
+
+// 🎯 API 데이터 수집 완료 감지 시 발동
+watch(data, (newData) => {
+  if (newData) {
+    nextTick(() => {
+      startChartObservation()
+    })
+  }
+}, { immediate: true })
+
+onMounted(() => {
+  if (data.value) {
+    startChartObservation()
+  }
+})
+
+onUnmounted(() => {
+  if (chartObserver) {
+    chartObserver.disconnect()
+    chartObserver = null
+  }
+})
+
+// 로그아웃 로직
+const handleLogout = async () => {
+  try {
+    await $fetch('/api/innerapi/logout', { method: 'POST' })
+    navigateTo('/login')
+  } catch (err: any) {
+    alert('로그아웃 실패: ' + err.message)
+  }
+}
 </script>

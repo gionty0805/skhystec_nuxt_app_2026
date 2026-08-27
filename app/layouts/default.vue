@@ -118,13 +118,23 @@
                 <div class="sitemap-div">
                   <p class="sitemap-sub-cat"><span>장비</span></p>
                   <ul class="sitemap-sub-list-wrap">
-                    <li class="sitemap-sub-list"><NuxtLink class="sitemap-sub-link" to="/">장비 반입</NuxtLink></li>
-                    <li class="sitemap-sub-list ml-mid-1"><NuxtLink class="sitemap-sub-link" to="/">장비 반출</NuxtLink></li>
+                    <li class="sitemap-sub-list"><NuxtLink class="sitemap-sub-link" to="/equipment-inflow">장비 반입</NuxtLink></li>
+                    <li class="sitemap-sub-list ml-mid-1"><NuxtLink class="sitemap-sub-link" to="/equipment-outflow">장비 반출</NuxtLink></li>
+                  </ul>
+                  <p class="sitemap-sub-cat"><span>Cable</span></p>
+                  <ul class="sitemap-sub-list-wrap">
+                    <!-- 🟢 모바일 사이트맵 닫기 흐름 연동을 위해 수동 내장 함수 매핑 -->
+                    <li class="sitemap-sub-list"><NuxtLink class="sitemap-sub-link" to="/cable" onclick="popClose('#sitemap')">케이블 신청</NuxtLink></li>
                   </ul>
                   <p class="sitemap-sub-cat"><span>Rack</span></p>
                   <ul class="sitemap-sub-list-wrap">
                     <!-- 🟢 모바일 사이트맵 닫기 흐름 연동을 위해 수동 내장 함수 매핑 -->
                     <li class="sitemap-sub-list"><NuxtLink class="sitemap-sub-link" to="/rack" onclick="popClose('#sitemap')">Rack 관리</NuxtLink></li>
+                  </ul>
+                  <p class="sitemap-sub-cat"><span>Portmap</span></p>
+                  <ul class="sitemap-sub-list-wrap">
+                    <!-- 🟢 모바일 사이트맵 닫기 흐름 연동을 위해 수동 내장 함수 매핑 -->
+                    <li class="sitemap-sub-list"><NuxtLink class="sitemap-sub-link" to="/portmap" onclick="popClose('#sitemap')">포트맵 관리</NuxtLink></li>
                   </ul>
                 </div>
               </li>
@@ -171,7 +181,7 @@ const { data, error, refresh } = await useFetch('/api/innerapi/dashboard')
 
 const handleLogout = async () => {
   try {
-    await $fetch('/api/innerapi/logout', { method: 'POST' })
+    await $fetch('/api/outerapi/logout', { method: 'POST' })
     if (typeof window !== 'undefined' && window.popClose) { window.popClose('#logout-pop') }
     await refresh()
     navigateTo('/login')
