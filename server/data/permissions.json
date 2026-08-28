@@ -8,13 +8,13 @@
         "/equipment-inflow": ["READ", "WRITE", "DELETE"],
         "/equipment-outflow": ["READ", "WRITE", "DELETE"],
         "/rack": ["READ", "WRITE", "DELETE"]
+        
       }
     },
     "USER": {
       "userRole": "OPERATOR",
       "permissions": {
         "/": ["READ", "WRITE"],
-        "/cable": ["READ", "WRITE"],
         "/equipment-inflow": ["READ", "WRITE"],
         "/equipment-outflow": ["READ", "WRITE"]
       }

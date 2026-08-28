@@ -1,5 +1,30 @@
 <!-- app/pages/index.vue -->
 <template>
+<!-- 권한 없음 팝업 -->
+<div
+  v-if="showUnauthorizedPopup"
+  class="auth-popup-overlay"
+>
+  <div class="auth-popup">
+    <h2 class="auth-popup-title">
+      접근 권한 없음
+    </h2>
+
+    <p class="auth-popup-message">
+      해당 메뉴에 접근할 권한이 없습니다.
+    </p>
+
+    <div class="auth-popup-btn-wrap">
+      <button
+        type="button"
+        class="btn-confirm"
+        @click="showUnauthorizedPopup = false"
+      >
+        확인
+      </button>
+    </div>
+  </div>
+</div>
   <NuxtLayout>
     <div class="content-wrap">
         <section class="content main-top">
@@ -364,9 +389,12 @@
 </template>
 <!-- app/pages/index.vue 스크립트 구역 -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRoute, navigateTo, useFetch, useHead } from '#app'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter, navigateTo, useFetch, useHead } from '#app'
+const route = useRoute()
+const router = useRouter()
 
+const showUnauthorizedPopup = ref(false)
 // 1. 🟢 대시보드 페이지 진입 시 전용 디자인 CSS 및 바디 클래스 결합
 useHead({
   bodyAttrs: {
@@ -464,8 +492,20 @@ watch(data, (newData) => {
 }, { immediate: true })
 
 onMounted(() => {
+  // 기존 차트 렌더링
   if (data.value) {
     startChartObservation()
+  }
+
+  // 권한 없는 메뉴 접근 시 팝업 표시
+  if (route.query.error === 'unauthorized') {
+    showUnauthorizedPopup.value = true
+
+    // URL의 ?error=unauthorized 제거
+    router.replace({
+      path: '/',
+      query: {}
+    })
   }
 })
 
@@ -486,3 +526,61 @@ const handleLogout = async () => {
   }
 }
 </script>
+<style scoped>
+.auth-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.auth-popup {
+  width: calc(100% - 40px);
+  max-width: 420px;
+
+  padding: 32px 28px;
+
+  background: #fff;
+  border-radius: 12px;
+
+  text-align: center;
+
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.auth-popup-title {
+  margin: 0 0 12px;
+
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.auth-popup-message {
+  margin: 0 0 24px;
+
+  font-size: 15px;
+  color: #666;
+}
+
+.auth-popup-btn-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.btn-confirm {
+  min-width: 100px;
+
+  padding: 10px 24px;
+
+  border: 0;
+  border-radius: 6px;
+
+  cursor: pointer;
+  font-weight: 600;
+}
+</style>
