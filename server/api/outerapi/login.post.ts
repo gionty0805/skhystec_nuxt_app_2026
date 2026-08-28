@@ -1,76 +1,260 @@
+import prisma from '../../utils/prisma'
+import * as argon2 from 'argon2'
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const body = await readBody(event)
 
-  // 1. 🛡️ 데이터 유실 및 잘못된 요청 양식 차단
-  if (!body || body.username === undefined || body.username === null) {
-    throw createError({ statusCode: 400, message: '아이디를 입력해 주세요.' })
-  }
+  // ============================================================
+  // 1. 입력값 검증
+  // ============================================================
 
-  // 브라우저에서 보낸 값 그대로 추출 (양끝 공백만 제거)
-  const inputUsername = String(body.username).trim()
-  const inputPassword = body.password ? String(body.password) : ''
-
-  // 2. 🛡️ 빈 값 또는 비정상적인 값 원천 차단
-  if (inputUsername === '' || inputUsername === 'undefined' || inputUsername === 'null') {
-    throw createError({ statusCode: 400, message: '올바른 아이디를 입력해 주세요.' })
-  }
-  // SQL Injection regex 차단
-  const injectionRegex = /['";-]/g 
-  if (injectionRegex.test(inputUsername)) {
-    throw createError({ statusCode: 400, message: '아이디에 허용되지 않는 특수문자가 포함되어 있습니다.' })
-  }
-
-  // 공통 보안 쿠키 세팅 옵션 (5분 타임아웃 고정)
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
-    maxAge: 60 * 5 // 5분
-  }
-
-  // 3. 🛡️ 테스트 관리자 계정 엄격 검증 (오타 방지를 위해 한 개씩 정확히 비교)
-  // 변수 대입 오류를 막기 위해 inputUsername이 정확히 일치하는지 개별 비교합니다.
-  if (inputUsername === '9111713') {
-    console.log(`[SECURITY PASSED] 🛡️ 안전하게 검증된 테스트 관리자 계정(9111713) 우회 가동`);
-    setCookie(event, 'auth_token', '9111713', cookieOptions)
-    return { success: true }
-  }
-  
-  if (inputUsername === '9111635') {
-    console.log(`[SECURITY PASSED] 🛡️ 안전하게 검증된 테스트 관리자 계정(9111635) 우회 가동`);
-    setCookie(event, 'auth_token', '9111635', cookieOptions)
-    return { success: true }
-  }
-
-  // 4. 일반 사원용 외부 백엔드 서버 인증 처리
-  try {
-    console.log(`[AUTH TRY] 외부 백엔드로 인증 요청을 송신합니다. ID: ${inputUsername}`);
-    
-    const response = await $fetch<{ token: string, user_id?: string }>(`${config.externalBackendUrl}/api/login`, {
-      method: 'POST',
-      body: { 
-        username: inputUsername, 
-        password: inputPassword 
-      } 
+  if (
+    !body ||
+    body.username === undefined ||
+    body.username === null
+  ) {
+    throw createError({
+      statusCode: 400,
+      message: '아이디를 입력해 주세요.'
     })
+  }
 
-    // 외부 백엔드 응답 검증 (토큰이 없으면 실패 처리)
-    if (!response || !response.token) {
-      throw createError({ statusCode: 401, message: '인증 토큰 발급에 실패했습니다.' })
+  const inputUsername = String(body.username).trim()
+  const inputPassword = body.password
+    ? String(body.password)
+    : ''
+
+  if (!inputUsername) {
+    throw createError({
+      statusCode: 400,
+      message: '올바른 아이디를 입력해 주세요.'
+    })
+  }
+
+  // 사번은 숫자만 허용
+  if (!/^\d+$/.test(inputUsername)) {
+    throw createError({
+      statusCode: 400,
+      message: '아이디는 숫자만 입력할 수 있습니다.'
+    })
+  }
+
+  // ============================================================
+  // 2. 사용자 조회
+  // ============================================================
+
+  let user
+
+  try {
+    user = await prisma.user.findUnique({
+      where: {
+        username: inputUsername
+      }
+    })
+  } catch (error) {
+    console.error(
+      `[LOGIN ERROR] DB 사용자 조회 실패: ${inputUsername}`,
+      error
+    )
+
+    throw createError({
+      statusCode: 500,
+      message: '사용자 정보를 확인하는 중 오류가 발생했습니다.'
+    })
+  }
+
+  // ============================================================
+  // 3. LOCAL 로그인
+  // localLoginEnabled = true인 사용자
+  // ============================================================
+
+  if (user?.localLoginEnabled === true) {
+
+    if (!inputPassword) {
+      throw createError({
+        statusCode: 400,
+        message: '비밀번호를 입력해 주세요.'
+      })
     }
 
-    // 백엔드가 공인한 ID가 없다면 본인이 입력했던 안전한 inputUsername을 사용
-    const verifiedUsername = response.user_id ? String(response.user_id).trim() : inputUsername;
+    if (!user.password) {
+      throw createError({
+        statusCode: 401,
+        message: '로컬 로그인 비밀번호가 설정되지 않은 계정입니다.'
+      })
+    }
 
-    setCookie(event, 'auth_token', verifiedUsername, cookieOptions)
-    return { success: true }
+    // Argon2 형식이 아닌 기존 평문 비밀번호 방어
+    if (!user.password.startsWith('$argon2')) {
+      console.error(
+        `[LOCAL LOGIN ERROR] 비밀번호 해시 형식 오류: ${inputUsername}`
+      )
 
-  } catch (error: any) {
-    console.error(`❌ [AUTH FAILED] 인증 실패 ID: ${inputUsername} ->`, error.message)
-    throw createError({
-      statusCode: error.response?.status || 401,
-      message: error.response?._data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
+      throw createError({
+        statusCode: 500,
+        message: '계정 비밀번호 설정에 문제가 있습니다. 관리자에게 문의해 주세요.'
+      })
+    }
+
+    let passwordValid = false
+
+    try {
+      passwordValid = await argon2.verify(
+        user.password,
+        inputPassword
+      )
+    } catch (error) {
+      console.error(
+        `[LOCAL LOGIN ERROR] 비밀번호 검증 오류: ${inputUsername}`,
+        error
+      )
+
+      throw createError({
+        statusCode: 500,
+        message: '로그인 처리 중 오류가 발생했습니다.'
+      })
+    }
+
+    if (!passwordValid) {
+      console.warn(
+        `[LOCAL LOGIN FAILED] 비밀번호 불일치: ${inputUsername}`
+      )
+
+      throw createError({
+        statusCode: 401,
+        message: '아이디 또는 비밀번호가 올바르지 않습니다.'
+      })
+    }
+
+    // LOCAL 로그인 성공
+    setCookie(event, 'auth_token', user.username, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 5
     })
+
+    console.log(
+      `[LOCAL LOGIN SUCCESS] ${inputUsername}`
+    )
+
+    return {
+      success: true,
+      loginType: 'LOCAL'
+    }
+  }
+
+  // ============================================================
+  // 4. LOCAL 로그인 미허용 → SSO 로그인
+  //
+  // user가 존재하지만 localLoginEnabled=false
+  // 또는 DB에 사용자가 아직 존재하지 않는 경우
+  // → SSO 인증
+  // ============================================================
+
+  console.log(
+    `[SSO LOGIN] SSO 인증 시작: ${inputUsername}`
+  )
+
+  // ------------------------------------------------------------
+  // SSO 환경설정 검증
+  // undefined 상태로 URL 생성되는 것 방지
+  // ------------------------------------------------------------
+
+  if (!config.ssoClientId) {
+    console.error('[SSO CONFIG ERROR] ssoClientId가 없습니다.')
+
+    throw createError({
+      statusCode: 500,
+      message: 'SSO Client ID가 설정되지 않았습니다. 관리자에게 문의해 주세요.'
+    })
+  }
+
+  if (!config.ssoAuthorizationEndpoint) {
+    console.error(
+      '[SSO CONFIG ERROR] ssoAuthorizationEndpoint가 없습니다.'
+    )
+
+    throw createError({
+      statusCode: 500,
+      message: 'SSO 인증 서버 주소가 설정되지 않았습니다. 관리자에게 문의해 주세요.'
+    })
+  }
+
+  if (!config.ssoRedirectUri) {
+    console.error(
+      '[SSO CONFIG ERROR] ssoRedirectUri가 없습니다.'
+    )
+
+    throw createError({
+      statusCode: 500,
+      message: 'SSO Callback 주소가 설정되지 않았습니다. 관리자에게 문의해 주세요.'
+    })
+  }
+
+  const ssoClientId = String(config.ssoClientId)
+  const ssoAuthorizationEndpoint =
+    String(config.ssoAuthorizationEndpoint)
+  const ssoRedirectUri =
+    String(config.ssoRedirectUri)
+
+  // ============================================================
+  // 5. SSO state 생성
+  // ============================================================
+
+  const state = crypto.randomUUID()
+
+  setCookie(event, 'sso_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 5
+  })
+
+  /**
+   * callback에서 어떤 사용자가 SSO를 시작했는지
+   * 비교할 수 있도록 사번도 임시 저장
+   */
+  setCookie(event, 'sso_username', inputUsername, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 5
+  })
+
+  // ============================================================
+  // 6. SSO Authorization URL 생성
+  // ============================================================
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: ssoClientId,
+    redirect_uri: ssoRedirectUri,
+    scope: 'openid',
+    state
+  })
+
+  const separator =
+    ssoAuthorizationEndpoint.includes('?')
+      ? '&'
+      : '?'
+
+  const ssoUrl =
+    `${ssoAuthorizationEndpoint}${separator}${params.toString()}`
+
+  console.log(
+    `[SSO LOGIN REDIRECT] ${inputUsername} → SSO`
+  )
+
+  // 보안상 전체 URL/Client ID 등을 운영 로그에 출력하지 않는 것을 권장
+  console.log(
+    `[SSO CONFIG] endpoint=${ssoAuthorizationEndpoint}, redirectUri=${ssoRedirectUri}`
+  )
+
+  return {
+    success: true,
+    loginType: 'SSO',
+    redirectUrl: ssoUrl
   }
 })

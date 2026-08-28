@@ -35,6 +35,13 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    ssoClientId: process.env.NUXT_SSO_CLIENT_ID,
+    ssoAuthorizationEndpoint: process.env.NUXT_SSO_AUTHORIZATION_ENDPOINT,
+    ssoTokenEndpoint: process.env.NUXT_SSO_TOKEN_ENDPOINT,
+    ssoUserinfoEndpoint: process.env.NUXT_SSO_USERINFO_ENDPOINT,
+    ssoJwksUri: process.env.NUXT_SSO_JWKS_URI,
+    ssoIssuer: process.env.NUXT_SSO_ISSUER,
+    ssoRedirectUri: process.env.NUXT_SSO_REDIRECT_URI,
     externalBackendUrl: process.env.EXTERNAL_BACKEND_URL || 'https://your-backend.com'
   },
   // 💡 Nitro 빌드 엔진이 프리즈마 클라이언트를 제멋대로 변조하지 못하도록 락을 겁니다.

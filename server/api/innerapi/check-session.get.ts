@@ -26,9 +26,11 @@ export default defineEventHandler(async (event) => {
     })
 
     // 쿠키는 유효하나 실제 DB에 유저가 존재하지 않는 예외 상황 차단
-    if (!user) {
-      console.warn(`[${currentTime}] ⚠️ [AUTH:INVALID] 쿠키 사번은 존재하나 DB 유저 정보 없음 | 사번: ${username}`)
-      return { isLoggedIn: false, userRole: 'GUEST', permissions: {} }
+    if (!user || !user.localLoginEnabled || !user.password) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: '로그인할 수 없는 계정입니다.',
+      })
     }
 
     // 2. 권한 마스터 JSON 로드

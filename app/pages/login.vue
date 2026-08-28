@@ -172,42 +172,67 @@ const errorMessage = ref('')
 const route = useRoute()
 
 const handleLogin = async () => {
-  // 에러 메시지 초기화
   errorMessage.value = ''
 
-  // 1. 🛡️ 프론트엔드 공백 입력 차단 유효성 검증
-  if (!form.username.trim()) {
+  const username = form.username.trim()
+
+  if (!username) {
     errorMessage.value = '아이디를 입력해 주세요.'
-    return
-  }
-  if (!form.password) {
-    errorMessage.value = '비밀번호를 입력해 주세요.'
     return
   }
 
   try {
-    // 2. 내부 인증 관문 서버(innerapi)로 실제 입력 데이터 전송
-    const response = await $fetch<{ success: boolean }>('/api/outerapi/login', {
+    const response = await $fetch<{
+      success: boolean
+      loginType?: 'LOCAL' | 'SSO'
+      redirectUrl?: string
+    }>('/api/outerapi/login', {
       method: 'POST',
       body: {
-        username: form.username,
+        username,
         password: form.password
       }
     })
 
-    // 3. 로그인 최종 성공 시 리다이렉트 동선 가동
-    if (response && response.success) {
-      // 💡 [빌드 에러 해결] 깨짐의 원인이었던 'as string' 대신 String() 함수로 안전하게 교정했습니다.
-      const queryRedirect = route.query.redirect
-      const redirectPath = queryRedirect ? String(queryRedirect) : '/'
-      
-      return navigateTo(decodeURIComponent(redirectPath))
+    // SSO 로그인
+    if (
+      response.success &&
+      response.loginType === 'SSO'
+    ) {
+      if (!response.redirectUrl) {
+        errorMessage.value =
+          'SSO 로그인 정보를 불러오지 못했습니다.'
+        return
+      }
+
+      window.location.href = response.redirectUrl
+      return
     }
-    
+
+    // 로컬 로그인 성공
+    if (
+      response.success &&
+      response.loginType === 'LOCAL'
+    ) {
+      const queryRedirect = route.query.redirect
+
+      const redirectPath = queryRedirect
+        ? String(queryRedirect)
+        : '/'
+
+      return navigateTo(
+        decodeURIComponent(redirectPath)
+      )
+    }
+
+    errorMessage.value = '로그인에 실패했습니다.'
+
   } catch (error: any) {
-    // 4. 🚨 서버가 던진 400, 401 보안 에러 메시지를 낚아채서 화면에 동적 실시간 출력
-    const errorMsg = error.response?._data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
-    errorMessage.value = errorMsg
+    errorMessage.value =
+      error.response?._data?.message ||
+      error.data?.message ||
+      error.statusMessage ||
+      '아이디 또는 비밀번호가 올바르지 않습니다.'
   }
 }
 </script>

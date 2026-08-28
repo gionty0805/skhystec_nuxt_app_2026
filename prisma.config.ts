@@ -11,3 +11,8 @@ export default defineConfig({
     url: "file:prisma/dev.db",
   },
 });
+
+//npx prisma format
+//npx prisma generate
+//npx prisma db push
+//npx nuxt dev --host 0.0.0.0 --port 8080
