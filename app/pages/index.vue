@@ -482,37 +482,34 @@ const startChartObservation = () => {
   })
 }
 
-// 🎯 API 데이터 수집 완료 감지 시 발동
-watch(data, (newData) => {
-  if (newData) {
-    nextTick(() => {
-      startChartObservation()
-    })
-  }
-}, { immediate: true })
+const handleUnauthorized = async () => {
+  showUnauthorizedPopup.value = true
 
-onMounted(() => {
-  // 기존 차트 렌더링
-  if (data.value) {
-    startChartObservation()
-  }
+  await router.replace({
+    path: '/',
+    query: {}
+  })
+}
 
-  // 권한 없는 메뉴 접근 시 팝업 표시
-  if (route.query.error === 'unauthorized') {
-    showUnauthorizedPopup.value = true
-
-    // URL의 ?error=unauthorized 제거
-    router.replace({
-      path: '/',
-      query: {}
-    })
+watch(
+  () => route.query.error,
+  async (error) => {
+    if (error === 'unauthorized') {
+      await handleUnauthorized()
+    }
+  },
+  {
+    immediate: true
   }
-})
+)
 
 onUnmounted(() => {
   if (chartObserver) {
     chartObserver.disconnect()
     chartObserver = null
+  }
+  if (data.value) {
+    startChartObservation()
   }
 })
 

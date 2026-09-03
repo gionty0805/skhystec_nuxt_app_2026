@@ -188,6 +188,7 @@ const handleLogin = async () => {
       redirectUrl?: string
     }>('/api/outerapi/login', {
       method: 'POST',
+      credentials: 'include',
       body: {
         username,
         password: form.password
@@ -220,9 +221,8 @@ const handleLogin = async () => {
         ? String(queryRedirect)
         : '/'
 
-      return navigateTo(
-        decodeURIComponent(redirectPath)
-      )
+      window.location.href = decodeURIComponent(redirectPath)
+      return
     }
 
     errorMessage.value = '로그인에 실패했습니다.'

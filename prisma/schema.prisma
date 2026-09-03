@@ -6,6 +6,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ============================================================
+// 사용자
+// ============================================================
 model User {
   id                Int      @id @default(autoincrement())
   username          String   @unique // 사번 또는 SSO sub
@@ -17,6 +20,9 @@ model User {
   createdAt         DateTime @default(now())
 }
 
+// ============================================================
+// 사용자 로그
+// ============================================================
 model UserLog {
   id           Int      @id @default(autoincrement())
   timestamp    DateTime @default(now())
@@ -28,4 +34,147 @@ model UserLog {
   status       String
   loginType    String? // SSO / LOCAL
   errorMessage String?
+}
+
+
+// Rack
+//  └── Equipment
+//        ├── EquipmentIp
+//        └── Port
+//
+//
+// ============================================================
+// 데이터센터 / Rack
+// ============================================================
+model Rack {
+  id          Int      @id @default(autoincrement())
+
+  region      String   // 이천
+  datacenter  String   // SKHDC2
+  rackNo      String   // Fe01
+
+  totalUnit   Int      @default(42)
+
+  description String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  equipments  Equipment[] //관계 연결
+
+  @@unique([region, datacenter, rackNo])
+  @@index([datacenter])
+}
+
+// ============================================================
+// 장비
+// ============================================================
+
+model Equipment {
+  id          Int      @id @default(autoincrement())
+
+  // Rack
+  rackId      Int
+  rack        Rack     @relation(    fields: [rackId],    references: [id],    onDelete: Restrict )
+
+  // 장비 분류
+  category    String?  // 시스템 / 네트워크
+  deviceType  String?  // Server / IPS / Switch / Firewall 등
+
+  // Rack 탑재
+  rackSize    Int?     // 장비 크기(U)
+  rackUnit    Int?     // 탑재 위치
+
+  // 장비 정보
+  vendor      String?  // DellEMC
+  model       String?  // R760
+  serialNo    String?
+  hostname    String?
+  purpose     String?  // SEP / 서버팜 / 백본 등
+
+  // 네트워크
+  macAddress  String?
+  ipAddresses EquipmentIp[]
+  status      String   @default("ACTIVE")
+
+  // 담당 정보
+  operator    String?  // 운영자
+  manager     String?  // 서버/장비 담당자
+
+  createdAt   DateTime @default(now())
+  installedAt DateTime?
+  updatedAt   DateTime @updatedAt
+
+  // Port
+  ports         Port[] @relation("EquipmentPorts")
+  connectedFrom Port[] @relation("TargetEquipment")
+
+  @@index([rackId])
+  @@index([deviceType])
+  @@index([hostname])
+}
+
+
+model EquipmentIp {
+  id Int @id @default(autoincrement())
+
+  equipmentId Int
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  ipAddress String
+
+  // MANAGEMENT / SERVICE / LOOPBACK / VIP 등
+  type String?
+
+  // 대표 IP 여부
+  isPrimary Boolean @default(false)
+
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([equipmentId, ipAddress])
+  @@index([equipmentId])
+  @@index([ipAddress])
+}
+
+// ============================================================
+// 백본 / 서버팜 / 네트워크 포트
+// ============================================================
+model Port {
+  id          Int       @id @default(autoincrement())
+
+  // 해당 포트를 가지고 있는 장비
+  equipmentId Int
+  equipment   Equipment @relation(    "EquipmentPorts",    fields: [equipmentId],    references: [id],    onDelete: Cascade )
+
+  // Port 번호
+  portNo      Int
+
+  // 연결 대상 장비가 Equipment에 존재하는 경우
+  targetEquipmentId Int?
+  targetEquipment   Equipment? @relation(    "TargetEquipment",    fields: [targetEquipmentId],    references: [id],    onDelete: SetNull  )
+
+  // 연결 대상 표시 정보
+  targetName  String?
+  targetPort  Int?
+
+  // 케이블 정보
+  cableType   String?   // UTP / Fiber
+  fiberType   String?   // Single / Multi
+
+  // 포트 상태
+  status      String?   // UP / DOWN / SHUTDOWN / UNUSED
+
+  // Uplink / Interlink / Mirror Port 등
+  description String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([equipmentId, portNo])
+  @@index([equipmentId])
+  @@index([targetEquipmentId])
+  @@index([targetName])
 }

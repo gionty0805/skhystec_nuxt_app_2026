@@ -12,7 +12,7 @@ export default defineNitroPlugin(async () => {
         password: 'pass123',
         role: 'ADMIN',
         email: 'test@skhystec.com',
-        localLoginEnabled: false // SSO
+        localLoginEnabled: true // SSO
       },
       {
         username: '9111635',
@@ -20,7 +20,7 @@ export default defineNitroPlugin(async () => {
         password: 'pass123',
         role: 'ADMIN',
         email: 'test@skhystec.com',
-        localLoginEnabled: true // 로컬 로그인
+        localLoginEnabled: false // 로컬 로그인
       }
     ]
 

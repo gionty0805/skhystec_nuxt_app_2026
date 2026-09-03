@@ -1,39 +1,128 @@
-export default defineNuxtRouteMiddleware(async (to, from) => {
-  // 1. [보완] 로그인 화면 제외는 물론, /api/ 로 시작하는 백엔드 내부 통신 경로는 미들웨어 통제 영역에서 즉시 통과 처리
+export default defineNuxtRouteMiddleware(async (to) => {
+  // =========================================================
+  // 1. 인증 제외 경로
+  // =========================================================
   if (to.path === '/login' || to.path.startsWith('/api/')) {
     return
   }
 
-  // 2. 세션 및 권한 데이터 조회 API 호출 (기존 로직 유지)
-  const { data } = await useFetch('/api/innerapi/check-session', {
-    headers: useRequestHeaders(['cookie'])
-  })
+  try {
+    let session: any = null
 
-  const session = data.value
+    // =========================================================
+    // 2. 세션 조회
+    // =========================================================
+    if (import.meta.server) {
+      /**
+       * SSR
+       *
+       * 현재 GET / 요청에 들어온 Cookie를
+       * check-session API에도 명시적으로 전달
+       */
+      const headers = useRequestHeaders(['cookie'])
 
-  // 3. 비로그인 유저 리다이렉트 (이젠 순수 웹페이지 주소만 잡힙니다)
-  if (!session || !session.isLoggedIn) {
-    return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
-  }
+      console.log('[AUTH SSR COOKIE]', {
+        path: to.path,
+        hasCookie: !!headers.cookie
+      })
 
-  const userPermissions = session.permissions || {}
-
-  // 중요: 사용자가 접근하려는 라우트 주소 문자열 매칭 판별
-  // 예: 사용자가 '/cable'에 가면 userPermissions['/cable']이 잡힘
-  const currentPathKey = Object.keys(userPermissions).find(allowedPath => {
-    if (allowedPath === '/') {
-      return to.path === '/' // 메인화면은 정확히 일치할 때만
+      session = await $fetch('/api/innerapi/check-session', {
+        headers
+      })
+    } else {
+      /**
+       * CSR
+       *
+       * 브라우저가 가지고 있는 Cookie 사용
+       */
+      session = await $fetch('/api/innerapi/check-session', {
+        credentials: 'include'
+      })
     }
-    return to.path.startsWith(allowedPath) // 그 외 서브메뉴는 경로 매칭
-  })
 
-  const pageActions = currentPathKey ? userPermissions[currentPathKey] : null
+    // =========================================================
+    // 3. 디버깅
+    // =========================================================
+    console.log('[ROUTE AUTH CHECK]', {
+      path: to.path,
+      isLoggedIn: session?.isLoggedIn,
+      username: session?.username,
+      role: session?.role
+    })
 
-  // 일반 유저가 주소창에 '/rack'을 쳐서 들어오는 경우 pageActions가 null이 되므로 홈('/')으로 퇴출
-  if (!pageActions && to.path !== '/') {
-    return navigateTo('/?error=unauthorized')
+    // =========================================================
+    // 4. 비로그인
+    // =========================================================
+    if (!session?.isLoggedIn) {
+      console.warn('[AUTH REDIRECT LOGIN]', {
+        path: to.path,
+        session
+      })
+
+      return navigateTo(
+        `/login?redirect=${encodeURIComponent(to.fullPath)}`
+      )
+    }
+
+    // =========================================================
+    // 5. ADMIN
+    // =========================================================
+    if (session.role === 'ADMIN') {
+      to.meta.pageActions = ['*']
+
+      console.log(
+        `[AUTH ADMIN BYPASS] ${session.username} → ${to.path}`
+      )
+
+      return
+    }
+
+    // =========================================================
+    // 6. 일반 사용자 권한
+    // =========================================================
+    const userPermissions = session.permissions || {}
+
+    const currentPathKey = Object.keys(userPermissions).find(
+      (allowedPath) => {
+        // 메인은 정확하게 "/"만
+        if (allowedPath === '/') {
+          return to.path === '/'
+        }
+
+        // /rack 권한이 있으면:
+        // /rack
+        // /rack/1
+        // /rack/detail/1
+        //
+        // 허용
+        return (
+          to.path === allowedPath ||
+          to.path.startsWith(`${allowedPath}/`)
+        )
+      }
+    )
+
+    const pageActions = currentPathKey
+      ? userPermissions[currentPathKey]
+      : null
+
+    // =========================================================
+    // 7. 메뉴 접근 권한 없음
+    // =========================================================
+    if (!pageActions && to.path !== '/') {
+      return navigateTo('/?error=unauthorized')
+    }
+
+    // =========================================================
+    // 8. 페이지에 세부 권한 전달
+    // =========================================================
+    to.meta.pageActions = pageActions || []
+
+  } catch (error) {
+    console.error('[ROUTE AUTH ERROR]', error)
+
+    return navigateTo(
+      `/login?redirect=${encodeURIComponent(to.fullPath)}`
+    )
   }
-
-  // 화면 (.vue) 파일에 세부 기능 권한 배열 배달 완료
-  to.meta.pageActions = pageActions || []
 })

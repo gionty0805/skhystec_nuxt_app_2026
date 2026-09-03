@@ -1,4 +1,6 @@
 export default defineEventHandler((event) => {
+  const token = getCookie(event, 'auth_token')
+  const username = token; // 로그인 처리 시 보관된 사번 매칭
   // 1. [해결책] 명시적으로 패스(/)를 지정하고 maxAge: 0을 강제 주입하여 확실하게 파기합니다.
   setCookie(event, 'auth_token', '', {
     httpOnly: true,
@@ -13,7 +15,7 @@ export default defineEventHandler((event) => {
     path: '/'
   })
 
-  console.log(`[SESSION] 🔓 로그아웃 처리가 완료되어 auth_token 쿠키를 완벽히 파쇄했습니다.`);
+  console.log(`[SESSION] 🔓 ${username} 로그아웃 처리가 완료되어 auth_token 쿠키를 완벽히 파쇄했습니다.`);
 
   return { success: true, message: '로그아웃 성공' }
 })

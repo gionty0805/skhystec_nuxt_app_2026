@@ -8,6 +8,7 @@
         "/equipment-inflow": ["READ", "WRITE", "DELETE"],
         "/equipment-outflow": ["READ", "WRITE", "DELETE"],
         "/rack": ["READ", "WRITE", "DELETE"]
+        ,"/portmap": ["READ", "WRITE", "DELETE"]
         
       }
     },
